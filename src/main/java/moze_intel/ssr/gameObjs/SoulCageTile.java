@@ -23,6 +23,9 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.network.NetworkManager;
+import net.minecraft.network.Packet;
+import net.minecraft.network.play.server.S35PacketUpdateTileEntity;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.AxisAlignedBB;
 
@@ -34,12 +37,14 @@ public class SoulCageTile extends TileEntity implements IInventory {
 	private String entName;
 	private boolean redstoneActive;
 	private boolean initChecks;
+	private boolean active;
 
 	public SoulCageTile() {
 		counter = 0;
 		updateCounter = 0;
 		redstoneActive = false;
 		initChecks = false;
+		active=false;
 	}
 
 	@Override
@@ -66,8 +71,10 @@ public class SoulCageTile extends TileEntity implements IInventory {
 
 			if (canEntitySpawn(ent)) {
 				setMetadata(2);
+				active=true;
 			} else {
 				setMetadata(1);
+				active=false;
 			}
 			updateCounter = 0;
 		} else {
@@ -245,23 +252,29 @@ public class SoulCageTile extends TileEntity implements IInventory {
 		initChecks = false;
 	}
 
+	@Override
 	public void readFromNBT(NBTTagCompound nbt) {
 		super.readFromNBT(nbt);
 
 		inventory = ItemStack.loadItemStackFromNBT(nbt.getCompoundTag("Shard"));
+
 		if (inventory != null) {
 			tier = Utils.getShardTier(inventory);
 			entName = Utils.getShardBoundEnt(inventory);
 		}
+		active=nbt.getBoolean("active");
 	}
 
+	@Override
 	public void writeToNBT(NBTTagCompound nbt) {
 		super.writeToNBT(nbt);
+
 		if (inventory != null) {
 			NBTTagCompound tag = new NBTTagCompound();
 			inventory.writeToNBT(tag);
 			nbt.setTag("Shard", tag);
 		}
+		nbt.setBoolean("active", this.active);
 	}
 
 	public int getSizeInventory() {
@@ -332,5 +345,26 @@ public class SoulCageTile extends TileEntity implements IInventory {
 	public boolean isItemValidForSlot(int slot, ItemStack stack) {
 		return stack != null && stack.getItem() == ObjHandler.SOUL_SHARD
 				&& Utils.isShardBound(stack) && Utils.getShardTier(stack) > 0;
+	}
+	
+	public String getEntityName(){
+		return this.entName;
+	}
+	
+	public int getTier(){
+		return this.tier;
+	}
+	
+	@Override
+	public void onDataPacket(NetworkManager net, S35PacketUpdateTileEntity pkt) {
+		this.readFromNBT(pkt.func_148857_g());
+        this.worldObj.markBlockForUpdate(this.xCoord, this.yCoord, this.zCoord);
+	}
+
+	@Override
+	public Packet getDescriptionPacket() {
+		NBTTagCompound tag = new NBTTagCompound();
+		this.writeToNBT(tag);
+		return new S35PacketUpdateTileEntity(this.xCoord, this.yCoord, this.zCoord, 0, tag);
 	}
 }
